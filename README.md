@@ -30,10 +30,23 @@
 
 **Claude Code API** exposes Claude Code's full capabilities through a REST API. Built on [`claude-agent-sdk`](https://github.com/anthropics/claude-code-sdk-python), it spawns the real Claude Code CLI with access to all native tools — Read, Write, Edit, Bash, Glob, Grep, and more.
 
-Works with **Claude Max/Pro plans** (CLI login) or **Anthropic API keys**. No extra billing if you're already on a Claude plan.
-
 > [!IMPORTANT]
 > This is an **educational/study project**. It is not affiliated with or endorsed by Anthropic. Use at your own risk. See [Disclaimer](#disclaimer).
+
+### Why this project?
+
+If you already have **Claude Code CLI** installed and logged in on your machine (`claude auth login`), this API turns it into a **remote-accessible service** — no Anthropic API key needed, no extra billing. Your existing **Max or Pro plan** powers every request.
+
+| | Traditional API | Claude Code API |
+|---|---|---|
+| **Authentication** | Requires `ANTHROPIC_API_KEY` | Works with your existing CLI login |
+| **Billing** | Pay per API token | Uses your Max/Pro plan — already paid |
+| **Tools** | Text-only LLM responses | Full tool access: Read, Write, Edit, Bash, Glob, Grep |
+| **Capabilities** | Chat completion | Executes real code, creates files, runs commands |
+| **Context** | Stateless | Persistent sessions with auto-resume |
+| **Setup** | Get API key, configure SDK | `claude auth login` → done |
+
+> **TL;DR:** Already paying for Claude Max? This gives you a REST API on top of it — for free.
 
 ## Features
 
