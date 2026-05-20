@@ -18,11 +18,12 @@ Server must be running: make dev
 
 import httpx
 import json
+import os
 import sys
 import time
 
 BASE = "http://localhost:8000/api/v1"
-KEY = "dev-key-123"
+KEY = os.environ.get("API_KEY", "dev-key-123")
 HEADERS = {"X-API-Key": KEY, "Content-Type": "application/json"}
 
 MAX_ROUNDS = 3

@@ -10,12 +10,13 @@ Server must be running: make dev
 """
 
 import httpx
+import os
 import time
 import json
 import sys
 
 BASE = "http://localhost:8000/api/v1"
-KEY = "dev-key-123"  # match your .env API_KEYS
+KEY = os.environ.get("API_KEY", "dev-key-123")  # match your .env API_KEYS
 HEADERS = {"X-API-Key": KEY, "Content-Type": "application/json"}
 
 
