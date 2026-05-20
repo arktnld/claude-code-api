@@ -17,6 +17,7 @@ from src.api.deps import get_claude, get_sessions
 from src.claude.client import ClaudeClient, ClaudeResponse, StreamUpdate
 from src.claude.exceptions import ClaudeError, ClaudeTimeoutError
 from src.api.extras import moderate_input
+from sqlalchemy import text
 from src.config import _csv_to_list
 from src.security.auth import rate_limiter, verify_api_key
 from src.sessions.manager import SessionManager
@@ -198,7 +199,8 @@ async def health(
 ):
     checks: dict[str, str] = {}
     try:
-        await sessions.db.db.execute("SELECT 1")
+        async with sessions.db.engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
     except Exception:
         checks["database"] = "error"
@@ -618,12 +620,8 @@ async def delete_session(
             and wdir.is_relative_to(sessions.config.approved_path)
             and wdir != sessions.config.approved_path
         ):
-            import shutil
             shutil.rmtree(wdir, ignore_errors=True)
-        await sessions.db.db.execute(
-            "DELETE FROM sessions WHERE rowid = ?", (session["rowid"],)
-        )
-        await sessions.db.db.commit()
+        await sessions.db.delete_session_by_rowid(session["rowid"])
     else:
         deleted = await sessions.delete(session["id"])
         if not deleted:

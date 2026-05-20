@@ -2,95 +2,141 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-import aiosqlite
 import structlog
+from sqlalchemy import (
+    Column,
+    Float,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    event,
+    text,
+)
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = structlog.get_logger()
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS sessions (
-    rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL,
-    working_dir TEXT NOT NULL,
-    system_prompt TEXT,
-    model TEXT,
-    max_turns INTEGER,
-    permission_mode TEXT,
-    effort TEXT,
-    allowed_tools TEXT,
-    disallowed_tools TEXT,
-    total_cost REAL DEFAULT 0.0,
-    total_turns INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
+metadata = MetaData()
 
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_rowid INTEGER NOT NULL REFERENCES sessions(rowid) ON DELETE CASCADE,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    tools_used TEXT,
-    cost REAL DEFAULT 0.0,
-    duration_ms INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL
-);
+sessions_table = Table(
+    "sessions",
+    metadata,
+    Column("rowid", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False),
+    Column("id", String, nullable=False, server_default=""),
+    Column("user_id", String, nullable=False),
+    Column("working_dir", String, nullable=False),
+    Column("system_prompt", Text),
+    Column("model", String),
+    Column("max_turns", Integer),
+    Column("permission_mode", String),
+    Column("effort", String),
+    Column("allowed_tools", Text),
+    Column("disallowed_tools", Text),
+    Column("total_cost", Float, server_default="0.0"),
+    Column("total_turns", Integer, server_default="0"),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
 
-CREATE TABLE IF NOT EXISTS jobs (
-    id TEXT PRIMARY KEY,
-    session_rowid INTEGER NOT NULL REFERENCES sessions(rowid) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'queued',
-    message TEXT NOT NULL,
-    webhook_url TEXT,
-    result TEXT,
-    error TEXT,
-    cost REAL DEFAULT 0.0,
-    duration_ms INTEGER DEFAULT 0,
-    tools_used TEXT,
-    created_at TEXT NOT NULL,
-    started_at TEXT,
-    completed_at TEXT
-);
+messages_table = Table(
+    "messages",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("session_rowid", Integer, nullable=False),
+    Column("role", String, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("tools_used", Text),
+    Column("cost", Float, server_default="0.0"),
+    Column("duration_ms", Integer, server_default="0"),
+    Column("created_at", String, nullable=False),
+)
 
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_name ON sessions(name);
-CREATE INDEX IF NOT EXISTS idx_sessions_claude_id ON sessions(id);
-CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_rowid);
-CREATE INDEX IF NOT EXISTS idx_jobs_session ON jobs(session_rowid);
-CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-"""
+jobs_table = Table(
+    "jobs",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("session_rowid", Integer, nullable=False),
+    Column("status", String, nullable=False, server_default="queued"),
+    Column("message", Text, nullable=False),
+    Column("webhook_url", String),
+    Column("result", Text),
+    Column("error", Text),
+    Column("cost", Float, server_default="0.0"),
+    Column("duration_ms", Integer, server_default="0"),
+    Column("tools_used", Text),
+    Column("created_at", String, nullable=False),
+    Column("started_at", String),
+    Column("completed_at", String),
+)
+
+# Indexes
+Index("idx_sessions_user", sessions_table.c.user_id)
+Index("idx_sessions_name", sessions_table.c.name)
+Index("idx_sessions_claude_id", sessions_table.c.id)
+Index("idx_messages_session", messages_table.c.session_rowid)
+Index("idx_jobs_session", jobs_table.c.session_rowid)
+Index("idx_jobs_status", jobs_table.c.status)
+
+
+def _sqlite_pragmas(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 class Database:
-    def __init__(self, db_path: str | Path) -> None:
-        self.db_path = Path(db_path)
-        self._db: aiosqlite.Connection | None = None
+    def __init__(self, database_url: str) -> None:
+        self.database_url = database_url
+        self._engine: AsyncEngine | None = None
+        self._is_sqlite = "sqlite" in database_url
 
     async def connect(self) -> None:
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = await aiosqlite.connect(str(self.db_path))
-        self._db.row_factory = aiosqlite.Row
-        await self._db.execute("PRAGMA journal_mode=WAL")
-        await self._db.execute("PRAGMA foreign_keys=ON")
-        await self._db.executescript(SCHEMA)
-        await self._db.commit()
-        logger.info("database_connected", path=str(self.db_path))
+        engine_kwargs: dict[str, Any] = {}
+
+        if self._is_sqlite:
+            # Ensure parent dir exists for SQLite
+            from pathlib import Path
+            db_path = self.database_url.split("///", 1)[-1] if "///" in self.database_url else ""
+            if db_path:
+                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+        self._engine = create_async_engine(self.database_url, **engine_kwargs)
+
+        # SQLite pragmas
+        if self._is_sqlite:
+            event.listen(self._engine.sync_engine, "connect", _sqlite_pragmas)
+
+        # Create tables
+        async with self._engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)
+
+        logger.info("database_connected", url=self._mask_url(self.database_url))
 
     async def close(self) -> None:
-        if self._db:
-            await self._db.close()
-            self._db = None
+        if self._engine:
+            await self._engine.dispose()
+            self._engine = None
 
     @property
-    def db(self) -> aiosqlite.Connection:
-        if not self._db:
+    def engine(self) -> AsyncEngine:
+        if not self._engine:
             raise RuntimeError("Database not connected")
-        return self._db
+        return self._engine
+
+    @staticmethod
+    def _mask_url(url: str) -> str:
+        if "@" in url:
+            pre, post = url.rsplit("@", 1)
+            return pre.split("://")[0] + "://***@" + post
+        return url
 
     # -- Sessions --
 
@@ -109,55 +155,52 @@ class Database:
         disallowed_tools: str | None = None,
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        cursor = await self.db.execute(
-            "INSERT INTO sessions (name, id, user_id, working_dir, system_prompt, model, max_turns, "
-            "permission_mode, effort, allowed_tools, disallowed_tools, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (name, session_id, user_id, working_dir, system_prompt, model, max_turns,
-             permission_mode, effort, allowed_tools, disallowed_tools, now, now),
-        )
-        await self.db.commit()
-        rowid = cursor.lastrowid or 0
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sessions_table.insert().values(
+                    name=name, id=session_id, user_id=user_id, working_dir=working_dir,
+                    system_prompt=system_prompt, model=model, max_turns=max_turns,
+                    permission_mode=permission_mode, effort=effort,
+                    allowed_tools=allowed_tools, disallowed_tools=disallowed_tools,
+                    total_cost=0.0, total_turns=0, created_at=now, updated_at=now,
+                )
+            )
+            rowid = result.inserted_primary_key[0]
         return {
-            "rowid": rowid,
-            "name": name,
-            "id": session_id,
-            "user_id": user_id,
-            "working_dir": working_dir,
-            "system_prompt": system_prompt,
-            "model": model,
-            "max_turns": max_turns,
-            "permission_mode": permission_mode,
-            "effort": effort,
-            "allowed_tools": allowed_tools,
-            "disallowed_tools": disallowed_tools,
-            "total_cost": 0.0,
-            "total_turns": 0,
-            "created_at": now,
-            "updated_at": now,
+            "rowid": rowid, "name": name, "id": session_id, "user_id": user_id,
+            "working_dir": working_dir, "system_prompt": system_prompt, "model": model,
+            "max_turns": max_turns, "permission_mode": permission_mode, "effort": effort,
+            "allowed_tools": allowed_tools, "disallowed_tools": disallowed_tools,
+            "total_cost": 0.0, "total_turns": 0, "created_at": now, "updated_at": now,
         }
 
+    async def _fetch_one(self, stmt) -> dict[str, Any] | None:
+        async with self.engine.connect() as conn:
+            result = await conn.execute(stmt)
+            row = result.mappings().fetchone()
+            return dict(row) if row else None
+
+    async def _fetch_all(self, stmt) -> list[dict[str, Any]]:
+        async with self.engine.connect() as conn:
+            result = await conn.execute(stmt)
+            return [dict(r) for r in result.mappings().fetchall()]
+
     async def get_session(self, session_id: str) -> dict[str, Any] | None:
-        cursor = await self.db.execute(
-            "SELECT rowid, * FROM sessions WHERE id = ?", (session_id,)
-        )
-        row = await cursor.fetchone()
-        return dict(row) if row else None
+        stmt = sessions_table.select().where(sessions_table.c.id == session_id)
+        return await self._fetch_one(stmt)
 
     async def get_session_by_name(self, name: str) -> dict[str, Any] | None:
-        cursor = await self.db.execute(
-            "SELECT rowid, * FROM sessions WHERE name = ? ORDER BY updated_at DESC LIMIT 1",
-            (name,),
+        stmt = (
+            sessions_table.select()
+            .where(sessions_table.c.name == name)
+            .order_by(sessions_table.c.updated_at.desc())
+            .limit(1)
         )
-        row = await cursor.fetchone()
-        return dict(row) if row else None
+        return await self._fetch_one(stmt)
 
     async def get_session_by_rowid(self, rowid: int) -> dict[str, Any] | None:
-        cursor = await self.db.execute(
-            "SELECT rowid, * FROM sessions WHERE rowid = ?", (rowid,)
-        )
-        row = await cursor.fetchone()
-        return dict(row) if row else None
+        stmt = sessions_table.select().where(sessions_table.c.rowid == rowid)
+        return await self._fetch_one(stmt)
 
     async def list_sessions(
         self,
@@ -165,81 +208,66 @@ class Database:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
+        stmt = sessions_table.select().order_by(sessions_table.c.updated_at.desc()).limit(limit).offset(offset)
         if user_id:
-            cursor = await self.db.execute(
-                "SELECT rowid, * FROM sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (user_id, limit, offset),
-            )
-        else:
-            cursor = await self.db.execute(
-                "SELECT rowid, * FROM sessions ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            )
-        return [dict(r) for r in await cursor.fetchall()]
+            stmt = stmt.where(sessions_table.c.user_id == user_id)
+        return await self._fetch_all(stmt)
 
     async def count_sessions(self, user_id: str | None = None) -> int:
+        from sqlalchemy import func, select
+        stmt = select(func.count()).select_from(sessions_table)
         if user_id:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) FROM sessions WHERE user_id = ?", (user_id,)
-            )
-        else:
-            cursor = await self.db.execute("SELECT COUNT(*) FROM sessions")
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+            stmt = stmt.where(sessions_table.c.user_id == user_id)
+        async with self.engine.connect() as conn:
+            result = await conn.execute(stmt)
+            return result.scalar() or 0
 
     async def sum_user_cost(self, user_id: str) -> float:
-        cursor = await self.db.execute(
-            "SELECT COALESCE(SUM(total_cost), 0) FROM sessions WHERE user_id = ?",
-            (user_id,),
+        from sqlalchemy import func, select
+        stmt = select(func.coalesce(func.sum(sessions_table.c.total_cost), 0)).where(
+            sessions_table.c.user_id == user_id
         )
-        row = await cursor.fetchone()
-        return float(row[0]) if row else 0.0
+        async with self.engine.connect() as conn:
+            result = await conn.execute(stmt)
+            return float(result.scalar() or 0.0)
 
     async def get_usage(self, user_id: str | None = None) -> dict[str, Any]:
+        from sqlalchemy import case, func, select
+
+        # Session stats
+        stmt = select(
+            func.count().label("sessions"),
+            func.coalesce(func.sum(sessions_table.c.total_cost), 0).label("cost"),
+            func.coalesce(func.sum(sessions_table.c.total_turns), 0).label("turns"),
+        )
         if user_id:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) as sessions, COALESCE(SUM(total_cost), 0) as cost, "
-                "COALESCE(SUM(total_turns), 0) as turns FROM sessions WHERE user_id = ?",
-                (user_id,),
-            )
-        else:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) as sessions, COALESCE(SUM(total_cost), 0) as cost, "
-                "COALESCE(SUM(total_turns), 0) as turns FROM sessions"
-            )
-        row = await cursor.fetchone()
+            stmt = stmt.where(sessions_table.c.user_id == user_id)
+        async with self.engine.connect() as conn:
+            row = (await conn.execute(stmt)).mappings().fetchone()
         usage = dict(row) if row else {"sessions": 0, "cost": 0.0, "turns": 0}
 
-        # Message counts
+        # Message count
+        msg_stmt = select(func.count()).select_from(messages_table)
         if user_id:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) FROM messages m JOIN sessions s ON m.session_rowid = s.rowid "
-                "WHERE s.user_id = ?", (user_id,),
-            )
-        else:
-            cursor = await self.db.execute("SELECT COUNT(*) FROM messages")
-        msg_row = await cursor.fetchone()
-        usage["messages"] = msg_row[0] if msg_row else 0
+            msg_stmt = msg_stmt.join(
+                sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid
+            ).where(sessions_table.c.user_id == user_id)
+        async with self.engine.connect() as conn:
+            usage["messages"] = (await conn.execute(msg_stmt)).scalar() or 0
 
         # Job counts
+        job_stmt = select(
+            func.count().label("total"),
+            func.sum(case((jobs_table.c.status == "done", 1), else_=0)).label("completed"),
+            func.sum(case((jobs_table.c.status == "running", 1), else_=0)).label("running"),
+            func.sum(case((jobs_table.c.status == "failed", 1), else_=0)).label("failed"),
+        )
         if user_id:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) as total, "
-                "SUM(CASE WHEN j.status = 'done' THEN 1 ELSE 0 END) as completed, "
-                "SUM(CASE WHEN j.status = 'running' THEN 1 ELSE 0 END) as running, "
-                "SUM(CASE WHEN j.status = 'failed' THEN 1 ELSE 0 END) as failed "
-                "FROM jobs j JOIN sessions s ON j.session_rowid = s.rowid WHERE s.user_id = ?",
-                (user_id,),
-            )
-        else:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) as total, "
-                "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as completed, "
-                "SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running, "
-                "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed "
-                "FROM jobs"
-            )
-        job_row = await cursor.fetchone()
+            job_stmt = job_stmt.join(
+                sessions_table, jobs_table.c.session_rowid == sessions_table.c.rowid
+            ).where(sessions_table.c.user_id == user_id)
+        async with self.engine.connect() as conn:
+            job_row = (await conn.execute(job_stmt)).mappings().fetchone()
         usage["jobs"] = dict(job_row) if job_row else {"total": 0, "completed": 0, "running": 0, "failed": 0}
 
         return usage
@@ -247,44 +275,68 @@ class Database:
     async def find_resumable_session(
         self, user_id: str, working_dir: str, timeout_hours: int
     ) -> dict[str, Any] | None:
-        cursor = await self.db.execute(
-            "SELECT rowid, * FROM sessions "
-            "WHERE user_id = ? AND working_dir = ? AND id != '' "
-            "AND datetime(updated_at) > datetime('now', ? || ' hours') "
-            "ORDER BY updated_at DESC LIMIT 1",
-            (user_id, working_dir, f"-{timeout_hours}"),
+        # Use raw text for datetime arithmetic (works on both SQLite and Postgres)
+        if self._is_sqlite:
+            time_filter = text(
+                "datetime(sessions.updated_at) > datetime('now', :offset || ' hours')"
+            )
+        else:
+            time_filter = text(
+                "sessions.updated_at::timestamp > NOW() - make_interval(hours => :offset)"
+            )
+        stmt = (
+            sessions_table.select()
+            .where(sessions_table.c.user_id == user_id)
+            .where(sessions_table.c.working_dir == working_dir)
+            .where(sessions_table.c.id != "")
+            .where(time_filter.bindparams(offset=timeout_hours))
+            .order_by(sessions_table.c.updated_at.desc())
+            .limit(1)
         )
-        row = await cursor.fetchone()
-        return dict(row) if row else None
-
-    _ALLOWED_SESSION_COLUMNS = {"working_dir", "total_cost", "total_turns", "updated_at"}
+        return await self._fetch_one(stmt)
 
     async def update_session(self, session_id: str, **kwargs: Any) -> None:
-        bad = set(kwargs) - self._ALLOWED_SESSION_COLUMNS
+        _ALLOWED = {"working_dir", "total_cost", "total_turns", "updated_at"}
+        bad = set(kwargs) - _ALLOWED
         if bad:
             raise ValueError(f"Invalid columns: {bad}")
         kwargs["updated_at"] = datetime.now(timezone.utc).isoformat()
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [session_id]
-        await self.db.execute(
-            f"UPDATE sessions SET {sets} WHERE id = ?", vals  # noqa: S608
-        )
-        await self.db.commit()
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                sessions_table.update().where(sessions_table.c.id == session_id).values(**kwargs)
+            )
 
     async def update_session_id(self, rowid: int, new_session_id: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        await self.db.execute(
-            "UPDATE sessions SET id = ?, updated_at = ? WHERE rowid = ?",
-            (new_session_id, now, rowid),
-        )
-        await self.db.commit()
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                sessions_table.update()
+                .where(sessions_table.c.rowid == rowid)
+                .values(id=new_session_id, updated_at=now)
+            )
 
     async def delete_session(self, session_id: str) -> bool:
-        cursor = await self.db.execute(
-            "DELETE FROM sessions WHERE id = ?", (session_id,)
-        )
-        await self.db.commit()
-        return cursor.rowcount > 0
+        async with self.engine.begin() as conn:
+            # Delete related messages and jobs first (no FK cascade in all DBs)
+            session = await self.get_session(session_id)
+            if session:
+                await conn.execute(
+                    messages_table.delete().where(messages_table.c.session_rowid == session["rowid"])
+                )
+                await conn.execute(
+                    jobs_table.delete().where(jobs_table.c.session_rowid == session["rowid"])
+                )
+            result = await conn.execute(
+                sessions_table.delete().where(sessions_table.c.id == session_id)
+            )
+            return result.rowcount > 0
+
+    async def delete_session_by_rowid(self, rowid: int) -> bool:
+        async with self.engine.begin() as conn:
+            await conn.execute(messages_table.delete().where(messages_table.c.session_rowid == rowid))
+            await conn.execute(jobs_table.delete().where(jobs_table.c.session_rowid == rowid))
+            result = await conn.execute(sessions_table.delete().where(sessions_table.c.rowid == rowid))
+            return result.rowcount > 0
 
     # -- Messages --
 
@@ -299,84 +351,38 @@ class Database:
     ) -> int:
         now = datetime.now(timezone.utc).isoformat()
         tools_json = json.dumps(tools_used) if tools_used else None
-        cursor = await self.db.execute(
-            "INSERT INTO messages (session_rowid, role, content, tools_used, cost, duration_ms, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (session_rowid, role, content, tools_json, cost, duration_ms, now),
-        )
-        await self.db.execute(
-            "UPDATE sessions SET updated_at = ? WHERE rowid = ?",
-            (now, session_rowid),
-        )
-        await self.db.commit()
-        return cursor.lastrowid or 0
-
-    # -- Jobs --
-
-    async def create_job(
-        self, job_id: str, session_rowid: int, message: str, webhook_url: str | None = None
-    ) -> dict[str, Any]:
-        now = datetime.now(timezone.utc).isoformat()
-        await self.db.execute(
-            "INSERT INTO jobs (id, session_rowid, status, message, webhook_url, created_at) "
-            "VALUES (?, ?, 'queued', ?, ?, ?)",
-            (job_id, session_rowid, message, webhook_url, now),
-        )
-        await self.db.commit()
-        return {
-            "id": job_id, "session_rowid": session_rowid, "status": "queued",
-            "message": message, "webhook_url": webhook_url, "created_at": now,
-        }
-
-    async def get_job(self, job_id: str) -> dict[str, Any] | None:
-        cursor = await self.db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
-        row = await cursor.fetchone()
-        if not row:
-            return None
-        d = dict(row)
-        for field in ("tools_used", "result"):
-            if d.get(field) and isinstance(d[field], str):
-                try:
-                    d[field] = json.loads(d[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-        return d
-
-    async def list_jobs(self, session_rowid: int) -> list[dict[str, Any]]:
-        cursor = await self.db.execute(
-            "SELECT * FROM jobs WHERE session_rowid = ? ORDER BY created_at DESC",
-            (session_rowid,),
-        )
-        return [dict(r) for r in await cursor.fetchall()]
-
-    async def update_job(self, job_id: str, **kwargs: Any) -> None:
-        sets = ", ".join(f"{k} = ?" for k in kwargs)
-        vals = list(kwargs.values()) + [job_id]
-        await self.db.execute(f"UPDATE jobs SET {sets} WHERE id = ?", vals)  # noqa: S608
-        await self.db.commit()
-
-    # -- Messages --
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                messages_table.insert().values(
+                    session_rowid=session_rowid, role=role, content=content,
+                    tools_used=tools_json, cost=cost, duration_ms=duration_ms, created_at=now,
+                )
+            )
+            await conn.execute(
+                sessions_table.update()
+                .where(sessions_table.c.rowid == session_rowid)
+                .values(updated_at=now)
+            )
+            return result.inserted_primary_key[0]
 
     async def get_messages(
         self, session_id: str, limit: int = 100
     ) -> list[dict[str, Any]]:
-        cursor = await self.db.execute(
-            "SELECT m.* FROM messages m "
-            "JOIN sessions s ON m.session_rowid = s.rowid "
-            "WHERE s.id = ? ORDER BY m.id ASC LIMIT ?",
-            (session_id, limit),
+        stmt = (
+            messages_table.select()
+            .join(sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid)
+            .where(sessions_table.c.id == session_id)
+            .order_by(messages_table.c.id.asc())
+            .limit(limit)
         )
-        rows = await cursor.fetchall()
-        result = []
-        for r in rows:
-            d = dict(r)
-            if d.get("tools_used"):
+        rows = await self._fetch_all(stmt)
+        for d in rows:
+            if d.get("tools_used") and isinstance(d["tools_used"], str):
                 try:
                     d["tools_used"] = json.loads(d["tools_used"])
                 except (json.JSONDecodeError, TypeError):
                     pass
-            result.append(d)
-        return result
+        return rows
 
     async def save_interaction(
         self,
@@ -390,36 +396,98 @@ class Database:
         cost: float = 0.0,
         duration_ms: int = 0,
     ) -> None:
-        """Atomic: update session + save user msg + save assistant msg in single commit."""
+        """Atomic: update session + save user msg + save assistant msg in single transaction."""
         now = datetime.now(timezone.utc).isoformat()
         tools_json = json.dumps(tools_used) if tools_used else None
 
-        # Update session_id if needed
-        if new_session_id:
-            await self.db.execute(
-                "UPDATE sessions SET id = ? WHERE rowid = ? AND id = ''",
-                (new_session_id, session_rowid),
+        async with self.engine.begin() as conn:
+            if new_session_id:
+                await conn.execute(
+                    sessions_table.update()
+                    .where(sessions_table.c.rowid == session_rowid)
+                    .where(sessions_table.c.id == "")
+                    .values(id=new_session_id)
+                )
+            await conn.execute(
+                sessions_table.update()
+                .where(sessions_table.c.rowid == session_rowid)
+                .values(total_cost=total_cost, total_turns=total_turns, updated_at=now)
+            )
+            await conn.execute(
+                messages_table.insert().values(
+                    session_rowid=session_rowid, role="user", content=user_message,
+                    tools_used=None, cost=0, duration_ms=0, created_at=now,
+                )
+            )
+            await conn.execute(
+                messages_table.insert().values(
+                    session_rowid=session_rowid, role="assistant", content=assistant_content,
+                    tools_used=tools_json, cost=cost, duration_ms=duration_ms, created_at=now,
+                )
             )
 
-        # Update session stats
-        await self.db.execute(
-            "UPDATE sessions SET total_cost = ?, total_turns = ?, updated_at = ? "
-            "WHERE rowid = ?",
-            (total_cost, total_turns, now, session_rowid),
-        )
+    # -- Jobs --
 
-        # User message
-        await self.db.execute(
-            "INSERT INTO messages (session_rowid, role, content, tools_used, cost, duration_ms, created_at) "
-            "VALUES (?, ?, ?, NULL, 0, 0, ?)",
-            (session_rowid, "user", user_message, now),
-        )
+    async def create_job(
+        self, job_id: str, session_rowid: int, message: str, webhook_url: str | None = None
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                jobs_table.insert().values(
+                    id=job_id, session_rowid=session_rowid, status="queued",
+                    message=message, webhook_url=webhook_url, cost=0.0,
+                    duration_ms=0, created_at=now,
+                )
+            )
+        return {
+            "id": job_id, "session_rowid": session_rowid, "status": "queued",
+            "message": message, "webhook_url": webhook_url, "created_at": now,
+        }
 
-        # Assistant message
-        await self.db.execute(
-            "INSERT INTO messages (session_rowid, role, content, tools_used, cost, duration_ms, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (session_rowid, "assistant", assistant_content, tools_json, cost, duration_ms, now),
-        )
+    async def get_job(self, job_id: str) -> dict[str, Any] | None:
+        stmt = jobs_table.select().where(jobs_table.c.id == job_id)
+        d = await self._fetch_one(stmt)
+        if not d:
+            return None
+        for field in ("tools_used", "result"):
+            if d.get(field) and isinstance(d[field], str):
+                try:
+                    d[field] = json.loads(d[field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
 
-        await self.db.commit()
+    async def list_jobs(self, session_rowid: int) -> list[dict[str, Any]]:
+        stmt = (
+            jobs_table.select()
+            .where(jobs_table.c.session_rowid == session_rowid)
+            .order_by(jobs_table.c.created_at.desc())
+        )
+        return await self._fetch_all(stmt)
+
+    async def update_job(self, job_id: str, **kwargs: Any) -> None:
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                jobs_table.update().where(jobs_table.c.id == job_id).values(**kwargs)
+            )
+
+    # -- Audit --
+
+    async def get_audit(
+        self, user_id: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        from sqlalchemy import select
+        stmt = (
+            select(
+                messages_table,
+                sessions_table.c.name.label("session_name"),
+                sessions_table.c.user_id,
+            )
+            .join(sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid)
+            .order_by(messages_table.c.id.desc())
+            .limit(limit)
+        )
+        if user_id:
+            stmt = stmt.where(sessions_table.c.user_id == user_id)
+        return await self._fetch_all(stmt)

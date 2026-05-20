@@ -52,10 +52,7 @@ class SessionManager:
             if sid:
                 await self.db.delete_session(sid)
             else:
-                await self.db.db.execute(
-                    "DELETE FROM sessions WHERE rowid = ?", (oldest["rowid"],)
-                )
-                await self.db.db.commit()
+                await self.db.delete_session_by_rowid(oldest["rowid"])
             logger.info("session_evicted", evicted_rowid=oldest["rowid"], user_id=user_id)
 
         session = await self.db.create_session(

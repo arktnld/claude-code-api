@@ -184,27 +184,9 @@ async def get_audit(
     if limit > 200:
         limit = 200
 
-    # Get recent messages across all sessions for this user
-    if effective_user:
-        cursor = await sessions.db.db.execute(
-            "SELECT m.*, s.name as session_name, s.user_id "
-            "FROM messages m JOIN sessions s ON m.session_rowid = s.rowid "
-            "WHERE s.user_id = ? ORDER BY m.id DESC LIMIT ?",
-            (effective_user, limit),
-        )
-    else:
-        cursor = await sessions.db.db.execute(
-            "SELECT m.*, s.name as session_name, s.user_id "
-            "FROM messages m JOIN sessions s ON m.session_rowid = s.rowid "
-            "ORDER BY m.id DESC LIMIT ?",
-            (limit,),
-        )
-
-    rows = await cursor.fetchall()
+    rows = await sessions.db.get_audit(effective_user, limit)
     entries = []
-    for r in rows:
-        d = dict(r)
-        # Truncate content for audit view
+    for d in rows:
         if d.get("content") and len(d["content"]) > 500:
             d["content"] = d["content"][:500] + "..."
         entries.append(d)

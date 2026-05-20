@@ -82,7 +82,7 @@ def _problem_response(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    db = Database(settings.db_path)
+    db = Database(settings.database_url)
     await db.connect()
 
     security = SecurityValidator(settings.approved_path)
