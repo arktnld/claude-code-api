@@ -610,6 +610,16 @@ async def delete_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     if not session["id"]:
+        # Pending session — clean up directory and DB row
+        wdir = Path(session["working_dir"]) if session.get("working_dir") else None
+        if (
+            wdir
+            and wdir.exists()
+            and wdir.is_relative_to(sessions.config.approved_path)
+            and wdir != sessions.config.approved_path
+        ):
+            import shutil
+            shutil.rmtree(wdir, ignore_errors=True)
         await sessions.db.db.execute(
             "DELETE FROM sessions WHERE rowid = ?", (session["rowid"],)
         )

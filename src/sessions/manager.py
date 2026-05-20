@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
@@ -85,7 +86,19 @@ class SessionManager:
     async def list(self, user_id: Optional[str] = None) -> list[dict[str, Any]]:
         return await self.db.list_sessions(user_id)
 
-    async def delete(self, session_id: str) -> bool:
+    async def delete(self, session_id: str, cleanup_files: bool = True) -> bool:
+        if cleanup_files:
+            session = await self.db.get_session(session_id)
+            if session and session.get("working_dir"):
+                wdir = Path(session["working_dir"])
+                if (
+                    wdir.exists()
+                    and wdir.is_relative_to(self.config.approved_path)
+                    and wdir != self.config.approved_path
+                ):
+                    shutil.rmtree(wdir, ignore_errors=True)
+                    logger.info("session_dir_removed", path=str(wdir))
+
         deleted = await self.db.delete_session(session_id)
         if deleted:
             logger.info("session_deleted", session_id=session_id)
