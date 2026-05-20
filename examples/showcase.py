@@ -25,7 +25,11 @@ def api(method, path, **kwargs):
     r = httpx.request(method, f"{BASE}{path}", headers=HEADERS, timeout=120, **kwargs)
     if r.status_code == 204:
         return None
-    return r.json()
+    data = r.json()
+    if r.status_code >= 400:
+        print(f"  ERROR {r.status_code}: {data.get('detail', data)}")
+        sys.exit(1)
+    return data
 
 
 def section(title):
