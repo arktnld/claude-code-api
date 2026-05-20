@@ -81,14 +81,26 @@ AGENTS = {
 }
 
 
-def log_request(method, path):
-    print(f"    {DIM}→ {method} {BASE}{path}{RESET}")
+def log_body(body, indent=4):
+    """Show request body."""
+    formatted = json.dumps(body, indent=2, ensure_ascii=False)
+    for line in formatted.split("\n"):
+        display = line if len(line) <= 100 else line[:100] + "..."
+        print(f"{' '*indent}  {DIM}{display}{RESET}")
 
 
 def api(method, path, **kwargs):
-    """Make API call with logging."""
-    log_request(method, path)
+    """Make API call with full logging."""
+    body = kwargs.get("json")
+    print(f"    {DIM}→ {method} {BASE}{path}{RESET}")
+    if body:
+        log_body(body)
+
+    start = time.time()
     r = httpx.request(method, f"{BASE}{path}", headers=HEADERS, timeout=300, **kwargs)
+    elapsed = int((time.time() - start) * 1000)
+    print(f"    {DIM}← {r.status_code} ({elapsed}ms){RESET}")
+
     if r.status_code == 204:
         return None
     data = r.json()

@@ -53,31 +53,34 @@ DEV_ICON = f"{CYAN}🔧 Developer{RESET}"
 REV_ICON = f"{MAGENTA}🔍 Reviewer{RESET}"
 
 
-def log_request(method, path):
+def log_body(body, indent=4):
+    """Show request body."""
+    formatted = json.dumps(body, indent=2, ensure_ascii=False)
+    for line in formatted.split("\n"):
+        # Truncate long lines (e.g. huge prompts)
+        display = line if len(line) <= 100 else line[:100] + "..."
+        print(f"{' '*indent}  {DIM}{display}{RESET}")
+
+
+def api(method, path, slow=False, **kwargs):
+    """Make API call with full logging."""
+    body = kwargs.get("json")
+
     print(f"    {DIM}→ {method} {BASE}{path}{RESET}")
+    if body:
+        log_body(body)
 
-
-def log_waiting(agent, msg):
-    print(f"    {YELLOW}⏳ {agent} — {msg}...{RESET}", end="", flush=True)
-
-
-def log_done(elapsed_ms=None):
-    suffix = f" ({elapsed_ms}ms)" if elapsed_ms else ""
-    print(f"\r    {GREEN}✓ Done{suffix}{RESET}                                          ")
-
-
-def api(method, path, wait_msg=None, agent="", **kwargs):
-    """Make API call with logging."""
-    log_request(method, path)
-    if wait_msg:
-        log_waiting(agent, wait_msg)
+    if slow:
+        print(f"    {YELLOW}⏳ Waiting for response...{RESET}", end="", flush=True)
 
     start = time.time()
     r = httpx.request(method, f"{BASE}{path}", headers=HEADERS, timeout=300, **kwargs)
     elapsed = int((time.time() - start) * 1000)
 
-    if wait_msg:
-        log_done(elapsed)
+    if slow:
+        print(f"\r    {GREEN}✓ Response received ({elapsed}ms){RESET}                    ")
+    else:
+        print(f"    {DIM}← {r.status_code} ({elapsed}ms){RESET}")
 
     if r.status_code == 204:
         return None
@@ -162,8 +165,7 @@ def main():
             print(f"  {DEV_ICON} — Improving code based on round {round_num - 1} feedback")
 
         dev_result = api("POST", "/sessions/agent-developer/chat",
-            wait_msg="Writing code",
-            agent="Developer",
+            slow=True,
             json={"message": dev_prompt})
 
         developer_response = dev_result["data"]["content"]
@@ -186,8 +188,7 @@ def main():
         )
 
         rev_result = api("POST", "/sessions/agent-reviewer/chat",
-            wait_msg="Reviewing code",
-            agent="Reviewer",
+            slow=True,
             json={"message": review_prompt})
 
         reviewer_feedback = rev_result["data"]["content"]
