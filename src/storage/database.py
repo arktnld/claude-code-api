@@ -365,8 +365,19 @@ class Database:
             )
             return result.inserted_primary_key[0]
 
+    async def count_messages(self, session_id: str) -> int:
+        from sqlalchemy import func, select
+        stmt = (
+            select(func.count())
+            .select_from(messages_table)
+            .join(sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid)
+            .where(sessions_table.c.id == session_id)
+        )
+        async with self.engine.connect() as conn:
+            return (await conn.execute(stmt)).scalar() or 0
+
     async def get_messages(
-        self, session_id: str, limit: int = 100
+        self, session_id: str, limit: int = 100, offset: int = 0
     ) -> list[dict[str, Any]]:
         stmt = (
             messages_table.select()
@@ -374,6 +385,7 @@ class Database:
             .where(sessions_table.c.id == session_id)
             .order_by(messages_table.c.id.asc())
             .limit(limit)
+            .offset(offset)
         )
         rows = await self._fetch_all(stmt)
         for d in rows:
@@ -458,11 +470,25 @@ class Database:
                     pass
         return d
 
-    async def list_jobs(self, session_rowid: int) -> list[dict[str, Any]]:
+    async def count_jobs(self, session_rowid: int) -> int:
+        from sqlalchemy import func, select
+        stmt = (
+            select(func.count())
+            .select_from(jobs_table)
+            .where(jobs_table.c.session_rowid == session_rowid)
+        )
+        async with self.engine.connect() as conn:
+            return (await conn.execute(stmt)).scalar() or 0
+
+    async def list_jobs(
+        self, session_rowid: int, limit: int = 50, offset: int = 0
+    ) -> list[dict[str, Any]]:
         stmt = (
             jobs_table.select()
             .where(jobs_table.c.session_rowid == session_rowid)
             .order_by(jobs_table.c.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return await self._fetch_all(stmt)
 
@@ -474,8 +500,20 @@ class Database:
 
     # -- Audit --
 
+    async def count_audit(self, user_id: str | None = None) -> int:
+        from sqlalchemy import func, select
+        stmt = (
+            select(func.count())
+            .select_from(messages_table)
+            .join(sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid)
+        )
+        if user_id:
+            stmt = stmt.where(sessions_table.c.user_id == user_id)
+        async with self.engine.connect() as conn:
+            return (await conn.execute(stmt)).scalar() or 0
+
     async def get_audit(
-        self, user_id: str | None = None, limit: int = 50
+        self, user_id: str | None = None, limit: int = 50, offset: int = 0
     ) -> list[dict[str, Any]]:
         from sqlalchemy import select
         stmt = (
@@ -487,6 +525,7 @@ class Database:
             .join(sessions_table, messages_table.c.session_rowid == sessions_table.c.rowid)
             .order_by(messages_table.c.id.desc())
             .limit(limit)
+            .offset(offset)
         )
         if user_id:
             stmt = stmt.where(sessions_table.c.user_id == user_id)

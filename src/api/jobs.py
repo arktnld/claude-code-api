@@ -75,6 +75,7 @@ class JobEnvelope(BaseModel):
 class JobListEnvelope(BaseModel):
     data: list[JobData]
     meta: dict[str, Any]
+    pagination: Optional[dict[str, int]] = None
 
 
 def _meta(request: Request) -> dict[str, Any]:
@@ -269,6 +270,8 @@ async def create_job(
 async def list_jobs(
     name: str,
     request: Request,
+    page: int = 1,
+    limit: int = 50,
     sessions: SessionManager = Depends(get_sessions),
     _api_key: str = Depends(verify_api_key),
 ):
@@ -276,10 +279,13 @@ async def list_jobs(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    jobs = await sessions.db.list_jobs(session["rowid"])
+    offset = (max(page, 1) - 1) * limit
+    total = await sessions.db.count_jobs(session["rowid"])
+    jobs = await sessions.db.list_jobs(session["rowid"], limit, offset)
     return JobListEnvelope(
         data=[JobData(**j) for j in jobs],
         meta=_meta(request),
+        pagination={"total": total, "page": page, "limit": limit, "pages": max(1, -(-total // limit))},
     )
 
 

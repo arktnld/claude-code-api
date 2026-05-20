@@ -174,6 +174,7 @@ async def reload_templates(request: Request, _api_key: str = Depends(verify_api_
 async def get_audit(
     request: Request,
     user_id: Optional[str] = None,
+    page: int = 1,
     limit: int = 50,
     sessions: SessionManager = Depends(get_sessions),
     api_key: str = Depends(verify_api_key),
@@ -184,7 +185,9 @@ async def get_audit(
     if limit > 200:
         limit = 200
 
-    rows = await sessions.db.get_audit(effective_user, limit)
+    offset = (max(page, 1) - 1) * limit
+    total = await sessions.db.count_audit(effective_user)
+    rows = await sessions.db.get_audit(effective_user, limit, offset)
     entries = []
     for d in rows:
         if d.get("content") and len(d["content"]) > 500:
@@ -196,4 +199,5 @@ async def get_audit(
         "count": len(entries),
         "user_id": effective_user,
         "meta": _meta(request),
+        "pagination": {"total": total, "page": page, "limit": limit, "pages": max(1, -(-total // limit))},
     }

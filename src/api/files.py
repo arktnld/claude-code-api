@@ -91,6 +91,8 @@ async def list_files(
     name: str,
     request: Request,
     path: str = "",
+    page: int = 1,
+    limit: int = 100,
     sessions: SessionManager = Depends(get_sessions),
     _api_key: str = Depends(verify_api_key),
 ):
@@ -107,22 +109,27 @@ async def list_files(
     if not target.is_dir():
         raise HTTPException(status_code=404, detail="Directory not found")
 
-    entries = []
+    all_entries = []
     for item in sorted(target.iterdir()):
         if item.name.startswith("."):
             continue
         rel = str(item.relative_to(working_dir))
-        entries.append({
+        all_entries.append({
             "name": item.name,
             "path": rel,
             "type": "directory" if item.is_dir() else "file",
             "size": item.stat().st_size if item.is_file() else None,
         })
 
+    total = len(all_entries)
+    offset = (max(page, 1) - 1) * limit
+    entries = all_entries[offset:offset + limit]
+
     return {
         "data": entries,
         "path": str(target.relative_to(working_dir)) if target != working_dir else ".",
         "meta": _meta(request),
+        "pagination": {"total": total, "page": page, "limit": limit, "pages": max(1, -(-total // limit))},
     }
 
 

@@ -180,6 +180,7 @@ class HistoryEnvelope(BaseModel):
     meta: MetaInfo
     session_id: str
     count: int
+    pagination: Optional[dict[str, int]] = None
 
 
 def _meta(request: Optional[Request] = None) -> MetaInfo:
@@ -660,7 +661,8 @@ async def set_repo(
 async def get_history(
     session_id: str,
     request: Request,
-    limit: int = 100,
+    page: int = 1,
+    limit: int = 50,
     sessions: SessionManager = Depends(get_sessions),
     _api_key: str = Depends(verify_api_key),
 ):
@@ -672,10 +674,13 @@ async def get_history(
             data=[], meta=_meta(request),
             session_id=str(session["rowid"]), count=0,
         )
-    messages = await sessions.get_history(session["id"], limit)
+    offset = (max(page, 1) - 1) * limit
+    total = await sessions.db.count_messages(session["id"])
+    messages = await sessions.db.get_messages(session["id"], limit, offset)
     return HistoryEnvelope(
         data=[MessageData(**m) for m in messages],
         meta=_meta(request),
         session_id=session["id"],
         count=len(messages),
+        pagination={"total": total, "page": page, "limit": limit, "pages": max(1, -(-total // limit))},
     )
