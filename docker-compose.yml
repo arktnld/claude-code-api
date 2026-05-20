@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - data:/app/data
+      - ${APPROVED_DIRECTORY:-.}:/projects:rw
+    environment:
+      - APPROVED_DIRECTORY=/projects
+      - DATABASE_URL=sqlite+aiosqlite:///app/data/sessions.db
+      - ENABLE_DOCS=${ENABLE_DOCS:-false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  data:

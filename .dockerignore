@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+.git
+.claude
+.env
+.vscode
+.idea
+data/
+*.egg-info
+dist/
+.pytest_cache
