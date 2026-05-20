@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="claudeGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="680" rx="12" fill="#0f172a"/>
+
+  <!-- Title -->
+  <text x="450" y="38" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="700">Claude Code API — Architecture</text>
+  <text x="450" y="58" text-anchor="middle" fill="#64748b" font-size="11">Each session = independent Claude Code CLI instance with persistent context</text>
+
+  <!-- CLIENT -->
+  <rect x="30" y="85" width="140" height="100" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="100" y="110" text-anchor="middle" fill="#94a3b8" font-size="10" font-weight="600">CLIENT</text>
+  <text x="100" y="132" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="700">REST / SSE</text>
+  <text x="100" y="150" text-anchor="middle" fill="#64748b" font-size="9">curl, SDK, frontend</text>
+  <text x="100" y="165" text-anchor="middle" fill="#64748b" font-size="9">webhooks, jobs</text>
+
+  <!-- Arrow: Client → API -->
+  <line x1="170" y1="135" x2="220" y2="135" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <defs><marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6366f1"/></marker></defs>
+
+  <!-- API LAYER -->
+  <rect x="225" y="75" width="200" height="520" rx="10" fill="#1e293b" stroke="#6366f1" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="225" y="75" width="200" height="30" rx="10" fill="url(#headerGrad)"/>
+  <rect x="225" y="95" width="200" height="10" fill="url(#headerGrad)"/>
+  <text x="325" y="96" text-anchor="middle" fill="white" font-size="12" font-weight="700">FastAPI Server</text>
+
+  <!-- Middleware -->
+  <rect x="240" y="115" width="170" height="45" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="133" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">MIDDLEWARE</text>
+  <text x="325" y="148" text-anchor="middle" fill="#64748b" font-size="8">Auth · Rate Limit · RequestID</text>
+
+  <!-- Routes -->
+  <rect x="240" y="170" width="170" height="55" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="188" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">ROUTES</text>
+  <text x="325" y="200" text-anchor="middle" fill="#64748b" font-size="8">/sessions · /chat · /chat/stream</text>
+  <text x="325" y="212" text-anchor="middle" fill="#64748b" font-size="8">/jobs · /files · /templates</text>
+
+  <!-- Session Manager -->
+  <rect x="240" y="235" width="170" height="50" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="253" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">SESSION MANAGER</text>
+  <text x="325" y="266" text-anchor="middle" fill="#64748b" font-size="8">create · resolve · resume · delete</text>
+  <text x="325" y="278" text-anchor="middle" fill="#64748b" font-size="8">budget check · eviction</text>
+
+  <!-- Security -->
+  <rect x="240" y="295" width="170" height="50" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="313" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">SECURITY</text>
+  <text x="325" y="326" text-anchor="middle" fill="#64748b" font-size="8">Path sandbox · Bash boundary</text>
+  <text x="325" y="338" text-anchor="middle" fill="#64748b" font-size="8">Input moderation · Tool callback</text>
+
+  <!-- Claude Client -->
+  <rect x="240" y="355" width="170" height="50" rx="6" fill="#1a1a2e" stroke="#f59e0b" stroke-width="1"/>
+  <text x="325" y="373" text-anchor="middle" fill="#fbbf24" font-size="9" font-weight="600">CLAUDE CLIENT</text>
+  <text x="325" y="386" text-anchor="middle" fill="#64748b" font-size="8">claude-agent-sdk wrapper</text>
+  <text x="325" y="398" text-anchor="middle" fill="#64748b" font-size="8">execute · stream · retry · interrupt</text>
+
+  <!-- Database -->
+  <rect x="240" y="415" width="170" height="50" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="433" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">DATABASE (SQLAlchemy)</text>
+  <text x="325" y="446" text-anchor="middle" fill="#64748b" font-size="8">SQLite or PostgreSQL</text>
+  <text x="325" y="458" text-anchor="middle" fill="#64748b" font-size="8">sessions · messages · jobs</text>
+
+  <!-- Templates -->
+  <rect x="240" y="475" width="170" height="40" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="493" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">TEMPLATES</text>
+  <text x="325" y="506" text-anchor="middle" fill="#64748b" font-size="8">12 YAML presets · hot-reload</text>
+
+  <!-- Config -->
+  <rect x="240" y="525" width="170" height="55" rx="6" fill="#1a1a2e" stroke="#334155" stroke-width="1"/>
+  <text x="325" y="543" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">CONFIG PRIORITY</text>
+  <text x="325" y="558" text-anchor="middle" fill="#22c55e" font-size="8">per-request override</text>
+  <text x="325" y="568" text-anchor="middle" fill="#eab308" font-size="8">→ session config</text>
+  <text x="325" y="578" text-anchor="middle" fill="#64748b" font-size="8">→ env global → default</text>
+
+  <!-- SESSIONS AREA -->
+  <rect x="475" y="75" width="400" height="520" rx="10" fill="#0c1222" stroke="#334155" stroke-width="1" stroke-dasharray="4"/>
+  <text x="675" y="96" text-anchor="middle" fill="#64748b" font-size="11" font-weight="600">CLAUDE CODE INSTANCES</text>
+
+  <!-- Session 1 -->
+  <rect x="490" y="115" width="370" height="120" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="490" y="115" width="370" height="25" rx="8" fill="url(#claudeGrad)"/>
+  <rect x="490" y="132" width="370" height="8" fill="url(#claudeGrad)"/>
+  <text x="675" y="133" text-anchor="middle" fill="white" font-size="11" font-weight="700">Session: "my-project" (active)</text>
+
+  <text x="505" y="158" fill="#94a3b8" font-size="9" font-weight="600">Claude Code CLI Process</text>
+  <text x="505" y="173" fill="#64748b" font-size="8">Working Dir: /projects/my-project</text>
+  <text x="505" y="185" fill="#64748b" font-size="8">Session ID: 555a982f-3c8f-43d0-...</text>
+  <text x="505" y="197" fill="#64748b" font-size="8">Tools: Read, Write, Edit, Bash, Glob, Grep</text>
+  <text x="505" y="209" fill="#64748b" font-size="8">Context: persistent conversation history</text>
+
+  <!-- Tool icons for Session 1 -->
+  <rect x="720" y="150" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#22c55e" stroke-width="0.8"/>
+  <text x="747" y="163" text-anchor="middle" fill="#22c55e" font-size="8">Read</text>
+  <rect x="780" y="150" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#22c55e" stroke-width="0.8"/>
+  <text x="807" y="163" text-anchor="middle" fill="#22c55e" font-size="8">Write</text>
+  <rect x="720" y="173" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#3b82f6" stroke-width="0.8"/>
+  <text x="747" y="186" text-anchor="middle" fill="#3b82f6" font-size="8">Edit</text>
+  <rect x="780" y="173" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#ef4444" stroke-width="0.8"/>
+  <text x="807" y="186" text-anchor="middle" fill="#ef4444" font-size="8">Bash</text>
+  <rect x="720" y="196" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#8b5cf6" stroke-width="0.8"/>
+  <text x="747" y="209" text-anchor="middle" fill="#8b5cf6" font-size="8">Glob</text>
+  <rect x="780" y="196" width="55" height="18" rx="4" fill="#1a1a2e" stroke="#8b5cf6" stroke-width="0.8"/>
+  <text x="807" y="209" text-anchor="middle" fill="#8b5cf6" font-size="8">Grep</text>
+
+  <!-- Session 2 -->
+  <rect x="490" y="250" width="370" height="100" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="490" y="250" width="370" height="25" rx="8" fill="url(#claudeGrad)"/>
+  <rect x="490" y="267" width="370" height="8" fill="url(#claudeGrad)"/>
+  <text x="675" y="268" text-anchor="middle" fill="white" font-size="11" font-weight="700">Session: "code-review" (active)</text>
+
+  <text x="505" y="293" fill="#94a3b8" font-size="9" font-weight="600">Claude Code CLI Process</text>
+  <text x="505" y="308" fill="#64748b" font-size="8">Working Dir: /projects/code-review</text>
+  <text x="505" y="320" fill="#64748b" font-size="8">Template: code-reviewer (effort: high)</text>
+  <text x="505" y="332" fill="#64748b" font-size="8">System: "You are a senior code reviewer..."</text>
+
+  <!-- Session 3 -->
+  <rect x="490" y="365" width="370" height="100" rx="8" fill="#1e293b" stroke="#64748b" stroke-width="1" filter="url(#shadow)"/>
+  <rect x="490" y="365" width="370" height="25" rx="8" fill="#334155"/>
+  <text x="675" y="383" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">Session: "new-feature" (pending)</text>
+
+  <text x="505" y="408" fill="#94a3b8" font-size="9" font-weight="600">No CLI process yet</text>
+  <text x="505" y="423" fill="#64748b" font-size="8">Working Dir: /projects/new-feature</text>
+  <text x="505" y="435" fill="#64748b" font-size="8">Status: waiting for first chat to spawn CLI</text>
+  <text x="505" y="447" fill="#64748b" font-size="8">Becomes active after POST /chat</text>
+
+  <!-- Job Queue -->
+  <rect x="490" y="480" width="370" height="55" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="1" filter="url(#shadow)"/>
+  <text x="675" y="500" text-anchor="middle" fill="#a5b4fc" font-size="10" font-weight="600">ASYNC JOB QUEUE</text>
+  <text x="675" y="515" text-anchor="middle" fill="#64748b" font-size="8">1 job per session (lock) · webhook callbacks</text>
+  <text x="675" y="527" text-anchor="middle" fill="#64748b" font-size="8">queued → running → done/failed/cancelled</text>
+
+  <!-- File System -->
+  <rect x="490" y="548" width="175" height="40" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="577" y="566" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">FILE SYSTEM</text>
+  <text x="577" y="579" text-anchor="middle" fill="#64748b" font-size="8">upload · download · list</text>
+
+  <!-- Workspace -->
+  <rect x="685" y="548" width="175" height="40" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="772" y="566" text-anchor="middle" fill="#94a3b8" font-size="9" font-weight="600">WORKSPACES</text>
+  <text x="772" y="579" text-anchor="middle" fill="#64748b" font-size="8">APPROVED_DIR/{session}/</text>
+
+  <!-- Arrow: API → Sessions -->
+  <line x1="425" y1="380" x2="475" y2="380" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowOrange)"/>
+  <defs><marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f59e0b"/></marker></defs>
+
+  <!-- Legend -->
+  <rect x="30" y="610" width="840" height="55" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="50" y="632" fill="#94a3b8" font-size="9" font-weight="600">FLOW:</text>
+  <text x="90" y="632" fill="#64748b" font-size="9">Client → API Key Auth → Rate Limit → Route → Session Manager → Claude Client → claude-agent-sdk → Claude Code CLI</text>
+  <text x="50" y="650" fill="#94a3b8" font-size="9" font-weight="600">AUTH:</text>
+  <text x="90" y="650" fill="#64748b" font-size="9">Uses existing `claude auth login` (Max/Pro plan) — no Anthropic API key needed</text>
+
+  <!-- Key callout -->
+  <rect x="30" y="200" width="140" height="70" rx="8" fill="#1e293b" stroke="#22c55e" stroke-width="1"/>
+  <text x="100" y="220" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="600">KEY INSIGHT</text>
+  <text x="100" y="237" text-anchor="middle" fill="#64748b" font-size="8">Each session =</text>
+  <text x="100" y="249" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="700">real Claude Code</text>
+  <text x="100" y="261" text-anchor="middle" fill="#64748b" font-size="8">with full tools</text>
+</svg>

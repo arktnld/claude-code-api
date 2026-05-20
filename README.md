@@ -231,6 +231,10 @@ docker run -p 8000:8000 --env-file .env -v /your/projects:/projects claude-code-
 
 ## Architecture
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="Architecture Diagram" width="100%">
+</p>
+
 ```
 src/
 ├── main.py              # FastAPI app, lifespan, error handlers (RFC 9457)
