@@ -3,6 +3,15 @@
   <p align="center">
     REST API wrapper for Claude Code CLI — execute code, manage files, and run commands remotely.
   </p>
+  <p align="center">
+    <a href="https://github.com/arktnld/claude-code-api/releases"><img src="https://img.shields.io/github/v/release/arktnld/claude-code-api?style=flat-square&color=blue" alt="Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/arktnld/claude-code-api?style=flat-square" alt="License"></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11+-blue?style=flat-square&logo=python&logoColor=white" alt="Python"></a>
+    <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+    <a href="https://github.com/arktnld/claude-code-api/stargazers"><img src="https://img.shields.io/github/stars/arktnld/claude-code-api?style=flat-square" alt="Stars"></a>
+    <a href="https://github.com/arktnld/claude-code-api/issues"><img src="https://img.shields.io/github/issues/arktnld/claude-code-api?style=flat-square" alt="Issues"></a>
+    <a href="https://github.com/arktnld/claude-code-api/wiki"><img src="https://img.shields.io/badge/docs-wiki-orange?style=flat-square" alt="Wiki"></a>
+  </p>
 </p>
 
 <p align="center">
