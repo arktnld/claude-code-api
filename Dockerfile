@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir .
 
 COPY src/ src/
 COPY gunicorn.conf.py .
+COPY templates.yml .
 
 RUN mkdir -p /app/data
 
