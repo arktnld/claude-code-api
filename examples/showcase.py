@@ -147,12 +147,14 @@ def main():
     show_response("Claude Response", d2["content"])
 
     # ──────────────────────────────────────────────────────────
-    section(6, "Chat History", "GET /api/v1/sessions/demo-showcase/history")
-    history = api("GET", "/sessions/demo-showcase/history?limit=10")
+    section(6, "Chat History (Paginated)", "GET /api/v1/sessions/demo-showcase/history?page=1&limit=10")
+    history = api("GET", "/sessions/demo-showcase/history?page=1&limit=10")
     for msg in history["data"]:
         icon = "👤" if msg["role"] == "user" else "🤖"
         content = (msg["content"] or "")[:70]
         print(f"  {icon} [{msg['role']:9s}] {content}...")
+    pg = history.get("pagination", {})
+    print(f"\n  {DIM}Pagination: page {pg.get('page')}/{pg.get('pages')} | total: {pg.get('total')} | limit: {pg.get('limit')}{RESET}")
 
     # ──────────────────────────────────────────────────────────
     section(7, "Session with Template", "POST /api/v1/sessions")
@@ -186,6 +188,8 @@ def main():
     for s in sessions["data"]:
         sc = GREEN if s["status"] == "active" else YELLOW
         print(f"  {s['name']:<20s} {sc}{s['status']:<10s}{RESET} ${s['total_cost']:>7.4f}")
+    pg = sessions.get("pagination", {})
+    print(f"\n  {DIM}Pagination: page {pg.get('page')}/{pg.get('pages')} | total: {pg.get('total')} | limit: {pg.get('limit')}{RESET}")
 
     # ──────────────────────────────────────────────────────────
     section(10, "Token Estimation", "POST /api/v1/tokens/count")
@@ -209,13 +213,15 @@ def main():
     print(f"  Jobs:        {jobs.get('total', 0)} total, {jobs.get('completed', 0) or 0} completed")
 
     # ──────────────────────────────────────────────────────────
-    section(12, "Audit Trail", "GET /api/v1/audit?limit=5")
-    audit = api("GET", "/audit?limit=5")
+    section(12, "Audit Trail (Paginated)", "GET /api/v1/audit?page=1&limit=5")
+    audit = api("GET", "/audit?page=1&limit=5")
     for entry in audit["data"]:
         sname = entry.get("session_name", "?")
         role = entry["role"]
         content = (entry["content"] or "")[:55]
         print(f"  [{sname:<15s}] {role:>9s}: {content}...")
+    pg = audit.get("pagination", {})
+    print(f"\n  {DIM}Pagination: page {pg.get('page')}/{pg.get('pages')} | total: {pg.get('total')} | limit: {pg.get('limit')}{RESET}")
 
     # ──────────────────────────────────────────────────────────
     section(13, "Cleanup", "DELETE /api/v1/sessions/{name}")

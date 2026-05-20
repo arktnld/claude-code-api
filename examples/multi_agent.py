@@ -224,18 +224,22 @@ def main():
     section("Agent Histories")
 
     print(f"  {DEV_ICON} conversation:")
-    dev_history = api("GET", "/sessions/agent-developer/history?limit=10")
+    dev_history = api("GET", "/sessions/agent-developer/history?page=1&limit=10")
     for msg in dev_history["data"]:
         icon = "👤" if msg["role"] == "user" else "🤖"
         content = (msg["content"] or "")[:65]
         print(f"    {icon} [{msg['role']:9s}] {content}...")
+    pg = dev_history.get("pagination", {})
+    print(f"    {DIM}Total messages: {pg.get('total', '?')}{RESET}")
 
     print(f"\n  {REV_ICON} conversation:")
-    rev_history = api("GET", "/sessions/agent-reviewer/history?limit=10")
+    rev_history = api("GET", "/sessions/agent-reviewer/history?page=1&limit=10")
     for msg in rev_history["data"]:
         icon = "👤" if msg["role"] == "user" else "🤖"
         content = (msg["content"] or "")[:65]
         print(f"    {icon} [{msg['role']:9s}] {content}...")
+    pg = rev_history.get("pagination", {})
+    print(f"    {DIM}Total messages: {pg.get('total', '?')}{RESET}")
 
     # ── Cleanup ──
     section("Cleanup")
