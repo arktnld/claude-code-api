@@ -9,7 +9,8 @@
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#api-overview">API Overview</a> •
-  <a href="docs/">Documentation</a> •
+  <a href="https://github.com/arktnld/claude-code-api/wiki">Wiki</a> •
+  <a href="docs/">Docs</a> •
   <a href="#configuration">Configuration</a> •
   <a href="#docker">Docker</a>
 </p>
@@ -232,6 +233,8 @@ src/
 ```
 
 ## Documentation
+
+> Full documentation available on the [Wiki](https://github.com/arktnld/claude-code-api/wiki) and in the [docs/](docs/) folder.
 
 | Document | Description |
 |----------|-------------|
